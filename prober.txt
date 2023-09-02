@@ -1,0 +1,116 @@
+#!/usr/bin/python
+import easysnmp
+import time
+import sys
+import math
+from easysnmp import Session
+from easysnmp import snmp_get, snmp_set, snmp_walk
+
+cmdinp = sys.argv
+smpt = 1 / float(cmdinp[2])
+ip, port, community = cmdinp[1].split(':')
+n = int(sys.argv[3])
+
+oids = []
+initOid = []
+comOid = []
+clockst = ""
+
+for x in range(4, len(cmdinp)):
+    oids.append(sys.argv[x])
+
+oids.insert(0, '1.3.6.1.2.1.1.3.0')
+
+
+def prober():
+    global initOid, initial_time
+    ses_sion = Session(hostname=ip, remote_port=port, community='public', version=2, timeout=1, retries=3)
+    respse = ses_sion.get(oids)
+    comOid = []
+
+    for y in range(1, len(respse)):
+        if respse[y].value != 'NOSUCHINSTANCE' and respse[y].value != 'NOSUCHOBJECT':
+            if respse[y].snmp_type == 'COUNTER64' or respse[y].snmp_type == 'COUNTER32' or respse[y].snmp_type == 'COUNTER' or respse[y].snmp_type == 'GAUGE':
+                comOid.append(int(respse[y].value))
+            else:
+                comOid.append(respse[y].value)
+
+            if n != 0 and len(initOid) > 0:
+                if respse[y].snmp_type in ['COUNTER32', 'COUNTER64', 'COUNTER']:
+                    valabo = int(comOid[y - 1]) - int(initOid[y - 1])
+                    valbel = round(clocknext - initial_time, 1)
+                    ROID = (valabo / valbel)
+                    if ROID < 0:
+                        if respse[y].snmp_type == 'COUNTER64':
+                            valabo = valabo + 2 ** 64
+                    elif respse[y].snmp_type == 'COUNTER32' or respse[y].snmp_type == 'COUNTER':
+                        valabo = valabo + 2 ** 32
+
+                    try:
+                        if clockst == str(clocknext):
+                            print(str(round(valabo / valbel)), end="|")
+                        else:
+                            print(str(round(clocknext)) + "|" + str(round(valabo / valbel)), end="|")
+                            clockst = str(clocknext)
+                    except:
+                        print(str(clocknext) + "|" + str(round(valabo / valbel)), end="|")
+                        clockst = str(clocknext)
+
+                elif respse[y].snmp_type == 'GAUGE':
+                    valabo = int(comOid[y - 1]) - int(initOid[y - 1])
+
+                    try:
+                        if clockst == str(clocknext):
+                            print(comOid[-1], "(" + str(valabo) + ")", end="|")
+                        else:
+                            print(str(clocknext) + "|" + str(comOid[-1]) + "(" + str(valabo) + ")", end="|")
+                            clockst = str(clocknext)
+                    except:
+                        print(str(clocknext) + "|" + str(comOid[-1]) + "(" + str(valabo) + ")", end="|")
+                        clockst = str(clocknext)
+
+                elif respse[y].snmp_type == 'OCTETSTR':
+                    try:
+                        if clockst == str(clocknext):
+                            print(str(comOid[-1]), end="|")
+                        else:
+                            print(clocknext, "|", str(comOid[-1]), end="|")
+                            clockst = str(clocknext)
+                    except:
+                        print(str(clocknext) + "|" + str(comOid[-1]), end="|")
+                        clockst = str(clocknext)
+
+    initOid = comOid
+    initial_time = clocknext
+
+
+if n == -1:
+    count = 0
+    initOid = []
+    ses_sion = Session(hostname=ip, remote_port=port, community='public', version=2)
+    while True:
+        clocknext = time.time()
+        prober()
+        if count != 0:
+            print(end="\n")
+        response_time = time.time()
+        count = count + 1
+        if smpt >= response_time - clocknext:
+            time.sleep(abs(smpt - response_time + clocknext))
+        else:
+            m = math.ceil((response_time - clocknext) / smpt)
+            time.sleep(((m * smpt) - response_time + clocknext))
+else:
+    initOid = []
+    ses_sion = Session(hostname=ip, remote_port=port, community='public', version=2)
+    for count in range(0, n + 1):
+        clocknext = time.time()
+        prober()
+        if count != 0:
+            print(end="\n")
+        response_time = time.time()
+        if smpt >= response_time - clocknext:
+            time.sleep(abs(smpt - response_time + clocknext))
+        else:
+            m = math.ceil((response_time - clocknext) / smpt)
+            time.sleep(((m * smpt) - response_time + clocknext))
